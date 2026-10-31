@@ -280,6 +280,18 @@ onSnapshot(collection(firestore,"clients"),(snap)=>{
 },(error)=>console.error(error));
 
 renderAll();
+
+// Firebase usa <script type="module">, por eso las funciones deben quedar
+// disponibles globalmente para los botones con onclick del HTML.
+window.show = show;
+window.showById = showById;
+window.scanEntry = scanEntry;
+window.scanExit = scanExit;
+window.confirmEntry = confirmEntry;
+window.confirmExit = confirmExit;
+window.clearEntry = clearEntry;
+window.clearExit = clearExit;
+window.addClient = addClient;
 </script>
 </body>
 </html>
