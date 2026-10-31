@@ -47,14 +47,14 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
     <input id="loginEmail" type="email" autocomplete="username" placeholder="usuario@ejemplo.com">
     <label>Contraseña</label>
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
-    <button class="btn" onclick="loginFragola()">Ingresar</button>
+    <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
   </div>
 </div>
 
 <header>
   <div><h1>🍦 Control Heladería</h1><small>Prototipo V1 — entradas, salidas y control de latas</small></div>
-  <div class="userbar"><div id="mode">Sin sesión</div><button class="logout" id="logoutBtn" onclick="logoutFragola()" style="display:none">Salir</button></div>
+  <div class="userbar"><div id="mode">Sin sesión</div><button class="logout" id="logoutBtn" type="button" style="display:none">Salir</button></div>
 </header>
 
 <nav>
@@ -293,7 +293,7 @@ async function loginFragola(){
     await signInWithEmailAndPassword(auth,email,password);
   }catch(e){
     console.error(e);
-    setLoginError("No se pudo iniciar sesión. Revisá el correo y la contraseña.");
+    setLoginError("No se pudo iniciar sesión: " + (e.code ? e.code.replace("auth/","") : "revisá el correo y la contraseña."));
   }
 }
 async function logoutFragola(){
@@ -370,6 +370,12 @@ onAuthStateChanged(auth, async (user)=>{
     renderAll();
   }
 });
+
+document.getElementById("loginBtn")?.addEventListener("click", loginFragola);
+document.getElementById("loginPassword")?.addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") loginFragola();
+});
+document.getElementById("logoutBtn")?.addEventListener("click", logoutFragola);
 
 renderAll();
 
