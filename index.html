@@ -37,6 +37,9 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 .userbar{display:flex;gap:10px;align-items:center}.logout{border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
 .mrow{display:flex;gap:8px;flex-wrap:wrap}.mrow select,.mrow input{width:auto;flex:1 1 120px}.mrow .btn{margin-top:0}
 .void td{opacity:.55}.void td:not(:last-child){text-decoration:line-through}
+.product.verde{background:#e6f6ec;border-color:#9ad7b1}.product.amarillo{background:#fff6d6;border-color:#f0d36b}.product.rojo{background:#fde4e4;border-color:#ee9a9a}
+.product .stock{font-size:22px}.product .estado{font-size:13px;margin-top:4px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.legend span{padding:6px 12px;border-radius:20px;font-weight:bold;font-size:14px}
 </style>
 </head>
 <body>
@@ -65,7 +68,7 @@ window.addEventListener("unhandledrejection",function(ev){
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
-    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 6 (roles y anulaciones)</div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 7 (semáforo de stock)</div>
   </div>
 </div>
 
@@ -137,6 +140,8 @@ window.addEventListener("unhandledrejection",function(ev){
 
 <section id="stock" class="view">
 <h2>🧊 Stock en cámara</h2>
+<div class="legend"><span style="background:#e6f6ec">🟢 Hay bastante (más de 25)</span><span style="background:#fff6d6">🟡 Queda poco (6 a 25)</span><span style="background:#fde4e4">🔴 Se acaba o no hay (5 o menos)</span></div>
+<button class="btn secondary" id="btnPocos" type="button" onclick="togglePocos()">Ver solo los que se están acabando</button>
 <div class="products" id="stockGrid"></div>
 </section>
 
@@ -362,6 +367,19 @@ async function loadUserRole(user){
   renderAll();
 }
 
+const NIVEL_ALTO=25, NIVEL_BAJO=5;
+let soloPocos=false;
+function nivel(n){
+ if(n<=0) return ["rojo","🔴","Sin stock"];
+ if(n<=NIVEL_BAJO) return ["rojo","🔴","Se está acabando"];
+ if(n<=NIVEL_ALTO) return ["amarillo","🟡","Queda poco"];
+ return ["verde","🟢","Hay bastante"];
+}
+function togglePocos(){
+ soloPocos=!soloPocos;
+ document.getElementById("btnPocos").textContent=soloPocos?"Ver todos":"Ver solo los que se están acabando";
+ renderAll();
+}
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function addManual(kind,btn){
@@ -417,9 +435,9 @@ function renderAll(){
  }).join("");
  document.getElementById("lastMoves").innerHTML=sorted.filter(m=>!m.voided).slice(0,5).map(m=>`<tr><td>${esc(m.date)||"-"}</td><td>${esc(m.type)}</td><td>${esc(m.flavor)} ${esc(m.size)} L</td><td>${esc(m.qty)}</td><td>${esc(m.operator)}</td></tr>`).join("");
  document.getElementById("stockGrid").innerHTML=flavors.flatMap(f=>["4","7"].map(sz=>{
-   const n=Number(db.stock[key(f,sz)]||0);
-   return `<div class="product"><div class="emoji">🍦</div><b>${esc(f)}</b><div>${sz} L</div><div class="stock">${n} latas</div></div>`;
- })).join("");
+   const n=Number(db.stock[key(f,sz)]||0), [cl,ic,tx]=nivel(n);
+   return {cl,html:`<div class="product ${cl}"><div class="emoji">🍦</div><b>${esc(f)}</b><div>${sz} L</div><div class="stock">${n} latas</div><div class="estado">${ic} ${tx}</div></div>`};
+ })).filter(x=>!soloPocos||x.cl==="rojo").map(x=>x.html).join("")||'<p class="muted">No hay productos en rojo. ¡Todo bien!</p>';
  renderCarts();
 }
 
@@ -482,6 +500,7 @@ window.addClient = addClient;
 window.loginFragola = loginFragola;
 window.logoutFragola = logoutFragola;
 window.addManual = addManual;
+window.togglePocos = togglePocos;
 window.voidMove = voidMove;
 window.deleteClient = deleteClient;
 </script>
