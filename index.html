@@ -40,6 +40,8 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 .product.verde{background:#e6f6ec;border-color:#9ad7b1}.product.amarillo{background:#fff6d6;border-color:#f0d36b}.product.rojo{background:#fde4e4;border-color:#ee9a9a}.product.gris{background:#d9dde1;border-color:#9aa3ab;color:#3b434a}
 .product .stock{font-size:22px}.product .estado{font-size:13px;margin-top:4px}
 .legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.legend span{padding:6px 12px;border-radius:20px;font-weight:bold;font-size:14px}
+.x{border:0;background:#fde4e4;color:#b52e2e;font-weight:bold;border-radius:8px;width:34px;height:34px;cursor:pointer;font-size:16px}.x:hover{background:#f5b5b5}
+.notice{display:flex;justify-content:space-between;align-items:center;gap:10px}
 </style>
 </head>
 <body>
@@ -68,7 +70,7 @@ window.addEventListener("unhandledrejection",function(ev){
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
-    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 9 (con cámara)</div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 10 (Dueño o Familia + Equipo)</div>
   </div>
 </div>
 
@@ -84,6 +86,7 @@ window.addEventListener("unhandledrejection",function(ev){
 <button onclick="show('stock',this)">🧊 Cámara</button>
 <button onclick="show('clientes',this)">👥 Clientes</button>
 <button onclick="show('historial',this)">📋 Historial</button>
+<button onclick="show('equipo',this)" style="display:none">👤 Equipo</button>
 </nav>
 
 <main>
@@ -159,6 +162,20 @@ window.addEventListener("unhandledrejection",function(ev){
 <table><thead><tr><th>Cliente</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody id="clientTable"></tbody></table>
 </section>
 
+<section id="equipo" class="view">
+<h2>👤 Equipo</h2>
+<div class="form">
+<p class="muted">Creá el usuario de cada persona. Entregale el correo y la contraseña; podrá entrar enseguida.</p>
+<label>Correo electrónico</label><input id="newUserEmail" type="email" autocomplete="off">
+<label>Contraseña (mínimo 6 caracteres)</label><input id="newUserPass" type="text" autocomplete="off">
+<label>Tipo de usuario</label>
+<select id="newUserRole"><option value="empleado">👷 Empleado</option><option value="admin">👑 Dueño o Familia</option></select>
+<button class="btn" type="button" onclick="createEmployee()">Crear usuario</button>
+</div>
+<br>
+<table><thead><tr><th>Usuario</th><th>Tipo</th></tr></thead><tbody id="userTable"></tbody></table>
+</section>
+
 <section id="historial" class="view">
 <h2>📋 Historial de movimientos</h2>
 <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Operador</th><th>Cliente</th><th>Repartidor</th><th>Estado</th></tr></thead><tbody id="historyTable"></tbody></table>
@@ -173,7 +190,7 @@ window.addEventListener("unhandledrejection",function(ev){
 </div>
 
 <script type="module">
-let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc,getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged;
+let initializeApp,getApp,getApps,deleteApp,getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc,setDoc,getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword;
 {
   const bases=[
     "https://www.gstatic.com/firebasejs/13.1.0/",
@@ -187,9 +204,9 @@ let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSna
       const A=await import(B+"firebase-app.js");
       const F=await import(B+"firebase-firestore.js");
       const U=await import(B+"firebase-auth.js");
-      ({initializeApp,getApp,getApps}=A);
-      ({getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc}=F);
-      ({getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged}=U);
+      ({initializeApp,getApp,getApps,deleteApp}=A);
+      ({getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc,setDoc}=F);
+      ({getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword}=U);
       cargado=true;
       document.getElementById("loginStatus").textContent+=" · Firebase "+B.split("/").slice(-2,-1)[0];
       break;
@@ -289,10 +306,14 @@ function scanExit(e){
  outCart[k]=already+1;renderCarts();
 }
 function renderCarts(){
- const render=(cart,id)=>document.getElementById(id).innerHTML=Object.entries(cart).map(([k,n])=>{
-  const [f,s]=k.split("|");return `<div class="notice">${f} — ${s} L × <b>${n}</b></div>`;
+ const render=(cart,id,kind)=>document.getElementById(id).innerHTML=Object.entries(cart).map(([k,n],i)=>{
+  const [f,s]=k.split("|");return `<div class="notice"><span>${esc(f)} — ${s} L × <b>${n}</b></span><button class="x" title="Quitar" onclick="removeLine('${kind}',${i})">✕</button></div>`;
  }).join("") || '<p class="muted">Todavía no hay latas escaneadas.</p>';
- render(inCart,"inList");render(outCart,"outList");
+ render(inCart,"inList","in");render(outCart,"outList","out");
+}
+function removeLine(kind,i){
+ const cart=kind==="in"?inCart:outCart, k=Object.keys(cart)[i];
+ if(k!==undefined){delete cart[k];renderCarts()}
 }
 
 async function confirmEntry(){
@@ -339,11 +360,11 @@ function setLoginError(msg){
 }
 function applyRoleUI(){
   const admin = currentRole==="admin";
-  document.getElementById("mode").textContent = currentUser ? (admin ? "Administrador" : "Empleado") : "Sin sesión";
+  document.getElementById("mode").textContent = currentUser ? (admin ? "👑 Dueño o Familia" : "👷 Empleado") : "Sin sesión";
   document.getElementById("logoutBtn").style.display = currentUser ? "block" : "none";
   document.querySelectorAll("nav button").forEach(btn=>{
     const label=btn.textContent||"";
-    if(label.includes("Historial") || label.includes("Cámara")) btn.style.display=currentUser?"":"";
+    if(label.includes("Historial")||label.includes("Equipo")) btn.style.display=admin?"":"none";
   });
   document.getElementById("loginOverlay").style.display=currentUser?"none":"flex";
 }
@@ -481,6 +502,27 @@ async function voidMove(id){
   await updateDoc(doc(firestore,"moves",id),{voided:true,voidedBy:currentUser.email,voidedAt:serverTimestamp(),voidReason:reason.trim()});
  }catch(e){console.error(e);alert("No se pudo anular. Revisá tu rol y las reglas de Firestore.");}
 }
+async function createEmployee(){
+ if(currentRole!=="admin"){alert("Solo Dueño o Familia puede crear usuarios.");return}
+ const email=document.getElementById("newUserEmail").value.trim().toLowerCase();
+ const pass=document.getElementById("newUserPass").value;
+ const role=document.getElementById("newUserRole").value;
+ if(!email||pass.length<6){alert("Completá el correo y una contraseña de al menos 6 caracteres.");return}
+ let sec=null;
+ try{
+  sec=initializeApp(firebaseConfig,"alta"+Date.now());
+  const a2=getAuth(sec);
+  const cred=await createUserWithEmailAndPassword(a2,email,pass);
+  await setDoc(doc(firestore,"users",cred.user.uid),{role,email,createdBy:currentUser.email,createdAt:serverTimestamp()});
+  await signOut(a2);
+  document.getElementById("newUserEmail").value="";document.getElementById("newUserPass").value="";
+  alert("Usuario creado: "+email);
+ }catch(e){
+  console.error(e);
+  const m={"auth/email-already-in-use":"Ese correo ya tiene un usuario.","auth/invalid-email":"El correo no es válido.","auth/weak-password":"La contraseña es muy débil."};
+  alert(m[e.code]||"No se pudo crear el usuario ("+(e.code||"error")+").");
+ }finally{ if(sec) try{await deleteApp(sec)}catch(_){} }
+}
 async function deleteClient(id){
  if(currentRole!=="admin"){alert("Solo un administrador puede borrar clientes.");return}
  if(!confirm("¿Borrar este cliente? Los movimientos ya registrados se conservan."))return;
@@ -501,10 +543,10 @@ function renderAll(){
  const sel=document.getElementById("outClient"), prev=sel.value;
  sel.innerHTML='<option value="">Seleccionar cliente...</option>'+db.clients.map(c=>`<option>${esc(c.name)}</option>`).join("");
  sel.value=prev;
- document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone)||"-"}</td><td>${esc(c.address)||"-"}</td><td>${admin?`<button class="btn danger" style="margin:0;padding:6px 10px" onclick="deleteClient('${c.id}')">Borrar</button>`:""}</td></tr>`).join("");
+ document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone)||"-"}</td><td>${esc(c.address)||"-"}</td><td>${admin?`<button class="x" title="Borrar cliente" onclick="deleteClient('${c.id}')">✕</button>`:""}</td></tr>`).join("");
  const sorted=db.moves.slice().sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
  document.getElementById("historyTable").innerHTML=sorted.map(m=>{
-  const est=m.voided?`Anulado por ${esc(m.voidedBy)}${m.voidReason?": "+esc(m.voidReason):""}`:(admin?`<button class="btn danger" style="margin:0;padding:6px 10px" onclick="voidMove('${m.id}')">Anular</button>`:"OK");
+  const est=m.voided?`Anulado por ${esc(m.voidedBy)}${m.voidReason?": "+esc(m.voidReason):""}`:(admin?`<button class="x" title="Anular movimiento" onclick="voidMove('${m.id}')">✕</button>`:"OK");
   return `<tr class="${m.voided?"void":""}"><td>${esc(m.date)||"-"}</td><td>${esc(m.type)}</td><td>${esc(m.flavor)} ${esc(m.size)} L</td><td>${esc(m.qty)}</td><td>${esc(m.operator)}</td><td>${esc(m.client)||"-"}</td><td>${esc(m.driver)||"-"}</td><td>${est}</td></tr>`;
  }).join("");
  document.getElementById("lastMoves").innerHTML=sorted.filter(m=>!m.voided).slice(0,5).map(m=>`<tr><td>${esc(m.date)||"-"}</td><td>${esc(m.type)}</td><td>${esc(m.flavor)} ${esc(m.size)} L</td><td>${esc(m.qty)}</td><td>${esc(m.operator)}</td></tr>`).join("");
@@ -512,12 +554,13 @@ function renderAll(){
    const n=Number(db.stock[key(f,sz)]||0), [cl,ic,tx]=nivel(n);
    return {cl,html:`<div class="product ${cl}"><div class="emoji">🍦</div><b>${esc(f)}</b><div>${sz} L</div><div class="stock">${n} latas</div><div class="estado">${ic} ${tx}</div></div>`};
  })).filter(x=>!soloPocos||x.cl==="rojo"||x.cl==="gris").map(x=>x.html).join("")||'<p class="muted">No hay productos acabándose ni sin stock. ¡Todo bien!</p>';
+ document.getElementById("userTable").innerHTML=(db.users||[]).map(u=>`<tr><td>${esc(u.email||u.id)}</td><td>${u.role==="admin"?"👑 Dueño o Familia":"👷 Empleado"}</td></tr>`).join("");
  renderCarts();
 }
 
 // Datos centralizados: cualquier cambio realizado desde PC o teléfono se refleja en ambos.
 // Los listeners se activan solamente después de iniciar sesión.
-let stopMovesListener=null, stopClientsListener=null;
+let stopMovesListener=null, stopClientsListener=null, stopUsersListener=null;
 function startDataListeners(){
   if(stopMovesListener) stopMovesListener();
   if(stopClientsListener) stopClientsListener();
@@ -534,6 +577,15 @@ function startDataListeners(){
     db.clients=snap.docs.map(d=>({id:d.id,...d.data()}));
     renderAll();
   },(error)=>console.error(error));
+
+  if(stopUsersListener) stopUsersListener();
+  stopUsersListener=null;
+  if(currentRole==="admin"){
+    stopUsersListener=onSnapshot(collection(firestore,"users"),(snap)=>{
+      db.users=snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderAll();
+    },(error)=>console.error(error));
+  }
 }
 
 onAuthStateChanged(auth, async (user)=>{
@@ -548,6 +600,7 @@ onAuthStateChanged(auth, async (user)=>{
     if(stopMovesListener) stopMovesListener();
     if(stopClientsListener) stopClientsListener();
     stopMovesListener=null; stopClientsListener=null;
+    if(stopUsersListener) stopUsersListener(); stopUsersListener=null;
     applyRoleUI();
     renderAll();
   }
@@ -574,6 +627,8 @@ window.addClient = addClient;
 window.loginFragola = loginFragola;
 window.logoutFragola = logoutFragola;
 window.addManual = addManual;
+window.createEmployee = createEmployee;
+window.removeLine = removeLine;
 window.openCam = openCam;
 window.closeCam = closeCam;
 window.togglePocos = togglePocos;
