@@ -70,7 +70,7 @@ window.addEventListener("unhandledrejection",function(ev){
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
-    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 10 (Dueño o Familia + Equipo)</div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 12</div>
   </div>
 </div>
 
@@ -103,6 +103,7 @@ window.addEventListener("unhandledrejection",function(ev){
     <div class="card"><div class="muted">Movimientos</div><div class="big" id="totalMoves">0</div></div>
     <div class="card"><div class="muted">Clientes</div><div class="big" id="totalClients">0</div></div>
   </div>
+  <div id="roleNotice"></div>
   <h3>Últimos movimientos</h3>
   <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Usuario</th></tr></thead><tbody id="lastMoves"></tbody></table>
 </section>
@@ -169,7 +170,7 @@ window.addEventListener("unhandledrejection",function(ev){
 <label>Correo electrónico</label><input id="newUserEmail" type="email" autocomplete="off">
 <label>Contraseña (mínimo 6 caracteres)</label><input id="newUserPass" type="text" autocomplete="off">
 <label>Tipo de usuario</label>
-<select id="newUserRole"><option value="empleado">👷 Empleado</option><option value="admin">👑 Dueño o Familia</option></select>
+<select id="newUserRole"><option value="empleado">👷 Empleado</option><option value="admin">👑 Familia</option></select>
 <button class="btn" type="button" onclick="createEmployee()">Crear usuario</button>
 </div>
 <br>
@@ -252,6 +253,7 @@ let inCart={}, outCart={};
 let firebaseReady = false;
 let currentUser = null;
 let currentRole = null;
+let roleProblem = "";
 
 const key=(flavor,size)=>flavor+"|"+size;
 function codeToProduct(code){
@@ -360,7 +362,7 @@ function setLoginError(msg){
 }
 function applyRoleUI(){
   const admin = currentRole==="admin";
-  document.getElementById("mode").textContent = currentUser ? (admin ? "👑 Dueño o Familia" : "👷 Empleado") : "Sin sesión";
+  document.getElementById("mode").textContent = currentUser ? (admin ? "👑 Familia" : "👷 Empleado") : "Sin sesión";
   document.getElementById("logoutBtn").style.display = currentUser ? "block" : "none";
   document.querySelectorAll("nav button").forEach(btn=>{
     const label=btn.textContent||"";
@@ -384,13 +386,22 @@ async function logoutFragola(){
   await signOut(auth);
 }
 async function loadUserRole(user){
-  // Los roles se guardarán en /users/{uid} como {role:"admin"} o {role:"empleado"}.
+  // Los roles se guardan en /users/{uid} como {role:"admin"} o {role:"empleado"}.
+  roleProblem="";
   try{
     const snap=await getDoc(doc(firestore,"users",user.uid));
-    currentRole=snap.exists() ? (snap.data().role||"empleado") : "empleado";
+    if(snap.exists()){
+      const raw=snap.data().role, r=String(raw||"").trim().toLowerCase();
+      currentRole=(r==="admin")?"admin":"empleado";
+      if(r!=="admin" && r!=="empleado") roleProblem="El campo role dice «"+(raw??"vacío")+"». Tiene que decir admin o empleado.";
+    }else{
+      currentRole="empleado";
+      roleProblem="No existe el documento de este usuario en la colección users. Su ID tiene que ser exactamente: "+user.uid;
+    }
   }catch(e){
     console.error(e);
     currentRole="empleado";
+    roleProblem="No se pudo leer el tipo de usuario ("+(e.code||e.message)+"). Revisá las reglas de Firestore. UID: "+user.uid;
   }
   currentUser=user;
   applyRoleUI();
@@ -491,7 +502,7 @@ function addManual(kind,btn){
  renderCarts();
 }
 async function voidMove(id){
- if(currentRole!=="admin"){alert("Solo un administrador puede anular movimientos.");return}
+ if(currentRole!=="admin"){alert("Solo la Familia puede anular movimientos.");return}
  const m=db.moves.find(x=>x.id===id); if(!m||m.voided)return;
  if(m.type==="ENTRADA" && (db.stock[key(m.flavor,m.size)]||0)-Number(m.qty)<0){
   alert("No se puede anular: ya salieron latas de esa entrada y el stock quedaría negativo. Primero anulá las salidas correspondientes.");return;
@@ -503,7 +514,7 @@ async function voidMove(id){
  }catch(e){console.error(e);alert("No se pudo anular. Revisá tu rol y las reglas de Firestore.");}
 }
 async function createEmployee(){
- if(currentRole!=="admin"){alert("Solo Dueño o Familia puede crear usuarios.");return}
+ if(currentRole!=="admin"){alert("Solo la Familia puede crear usuarios.");return}
  const email=document.getElementById("newUserEmail").value.trim().toLowerCase();
  const pass=document.getElementById("newUserPass").value;
  const role=document.getElementById("newUserRole").value;
@@ -524,7 +535,7 @@ async function createEmployee(){
  }finally{ if(sec) try{await deleteApp(sec)}catch(_){} }
 }
 async function deleteClient(id){
- if(currentRole!=="admin"){alert("Solo un administrador puede borrar clientes.");return}
+ if(currentRole!=="admin"){alert("Solo la Familia puede borrar clientes.");return}
  if(!confirm("¿Borrar este cliente? Los movimientos ya registrados se conservan."))return;
  try{await deleteDoc(doc(firestore,"clients",id));}catch(e){console.error(e);alert("No se pudo borrar el cliente.");}
 }
@@ -554,7 +565,8 @@ function renderAll(){
    const n=Number(db.stock[key(f,sz)]||0), [cl,ic,tx]=nivel(n);
    return {cl,html:`<div class="product ${cl}"><div class="emoji">🍦</div><b>${esc(f)}</b><div>${sz} L</div><div class="stock">${n} latas</div><div class="estado">${ic} ${tx}</div></div>`};
  })).filter(x=>!soloPocos||x.cl==="rojo"||x.cl==="gris").map(x=>x.html).join("")||'<p class="muted">No hay productos acabándose ni sin stock. ¡Todo bien!</p>';
- document.getElementById("userTable").innerHTML=(db.users||[]).map(u=>`<tr><td>${esc(u.email||u.id)}</td><td>${u.role==="admin"?"👑 Dueño o Familia":"👷 Empleado"}</td></tr>`).join("");
+ document.getElementById("userTable").innerHTML=(db.users||[]).map(u=>`<tr><td>${esc(u.email||u.id)}</td><td>${u.role==="admin"?"👑 Familia":"👷 Empleado"}</td></tr>`).join("");
+ document.getElementById("roleNotice").innerHTML=roleProblem?`<div class="notice error">⚠ ${esc(roleProblem)}</div>`:"";
  renderCarts();
 }
 
