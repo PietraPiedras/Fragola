@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Heladería</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#20252b}
+header{background:#17324d;color:white;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:22px}header small{opacity:.8}
+nav{display:flex;gap:8px;flex-wrap:wrap;padding:14px;background:white;box-shadow:0 2px 8px #0001}
+nav button{border:0;border-radius:10px;padding:12px 16px;background:#e9eef3;cursor:pointer;font-weight:bold}
+nav button.active{background:#17324d;color:white}
+main{max-width:1200px;margin:auto;padding:20px}.view{display:none}.view.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.card{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 10px #0001}
+.big{font-size:30px;font-weight:bold}.muted{color:#68737d}
+.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:22px}
+.action{border:0;border-radius:16px;padding:28px;background:white;box-shadow:0 3px 12px #0001;font-size:20px;font-weight:bold;cursor:pointer}
+.action.in{border-left:7px solid #22a06b}.action.out{border-left:7px solid #d64545}
+label{display:block;font-weight:bold;margin:12px 0 6px}select,input{width:100%;padding:12px;border:1px solid #ccd3da;border-radius:9px;font-size:16px}
+.btn{border:0;border-radius:9px;padding:12px 18px;font-weight:bold;cursor:pointer;background:#17324d;color:white;margin-top:14px}
+.btn.secondary{background:#e9eef3;color:#20252b}.btn.danger{background:#b52e2e}
+.form{background:white;padding:20px;border-radius:14px;max-width:700px;box-shadow:0 2px 10px #0001}
+.scanbox{background:#fff8df;border:2px dashed #d4a72c;border-radius:14px;padding:20px;margin:18px 0}
+.scanbox input{font-size:22px;text-align:center}
+table{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}
+th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background:#edf1f4}
+.products{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:18px}
+.product{background:white;border:2px solid transparent;border-radius:14px;padding:14px;cursor:pointer;box-shadow:0 2px 8px #0001}
+.product:hover{border-color:#17324d}.emoji{font-size:40px}.stock{font-weight:bold;margin-top:8px}
+.notice{padding:13px;border-radius:10px;background:#e8f4ed;margin:12px 0}.error{background:#fdeaea}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🍦 Control Heladería</h1><small>Prototipo V1 — entradas, salidas y control de latas</small></div>
+  <div id="mode">Modo empleado</div>
+</header>
+
+<nav>
+<button class="active" onclick="show('inicio',this)">Inicio</button>
+<button onclick="show('entrada',this)">🟢 Entrada</button>
+<button onclick="show('salida',this)">🔴 Salida</button>
+<button onclick="show('stock',this)">🧊 Cámara</button>
+<button onclick="show('clientes',this)">👥 Clientes</button>
+<button onclick="show('historial',this)">📋 Historial</button>
+</nav>
+
+<main>
+<section id="inicio" class="view active">
+  <h2>Resumen</h2>
+  <div class="actions">
+    <button class="action in" onclick="showById('entrada')">🟢 Registrar entrada<br><small>Fabricación / ingreso a cámara</small></button>
+    <button class="action out" onclick="showById('salida')">🔴 Registrar salida<br><small>Pedido / salida hacia cliente</small></button>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="muted">Latas en cámara</div><div class="big" id="totalStock">0</div></div>
+    <div class="card"><div class="muted">Movimientos</div><div class="big" id="totalMoves">0</div></div>
+    <div class="card"><div class="muted">Clientes</div><div class="big" id="totalClients">0</div></div>
+  </div>
+  <div id="homeNotice"></div>
+</section>
+
+<section id="entrada" class="view">
+<h2>🟢 Entrada a cámara</h2>
+<div class="form">
+<label>Empleado / operador</label><input id="inOperator" placeholder="Ej.: Juan">
+<div class="scanbox">
+<b>Escanear lata</b>
+<p class="muted">Para probar ahora: <b>CHOC4</b> = Chocolate 4 L. Con códigos definitivos: F01-4, F01-7, F02-4...</p>
+<input id="inScan" placeholder="Código, ej. CHOC4" onkeydown="scanEntry(event)">
+</div>
+<div id="inList"></div>
+<button class="btn" onclick="confirmEntry()">Confirmar entrada</button>
+<button class="btn secondary" onclick="clearEntry()">Cancelar</button>
+</div>
+</section>
+
+<section id="salida" class="view">
+<h2>🔴 Salida de cámara</h2>
+<div class="form">
+<label>Cliente</label>
+<select id="outClient"></select>
+<label>Repartidor (opcional)</label><input id="outDriver" placeholder="Ej.: Pedro">
+<div class="scanbox">
+<b>Escanear latas del pedido</b>
+<p class="muted">Primero seleccioná el cliente y después escaneá.</p>
+<input id="outScan" placeholder="Código, ej. CHOC4" onkeydown="scanExit(event)">
+</div>
+<div id="outList"></div>
+<button class="btn danger" onclick="confirmExit()">Confirmar salida</button>
+<button class="btn secondary" onclick="clearExit()">Cancelar</button>
+</div>
+</section>
+
+<section id="stock" class="view">
+<h2>🧊 Stock en cámara</h2>
+<div class="products" id="stockGrid"></div>
+</section>
+
+<section id="clientes" class="view">
+<h2>👥 Clientes</h2>
+<div class="form">
+<label>Nombre / comercio</label><input id="newName">
+<label>WhatsApp / teléfono</label><input id="newPhone">
+<label>Dirección</label><input id="newAddress">
+<button class="btn" onclick="addClient()">Agregar cliente</button>
+</div>
+<br>
+<table><thead><tr><th>Cliente</th><th>Contacto</th><th>Dirección</th></tr></thead><tbody id="clientTable"></tbody></table>
+</section>
+
+<section id="historial" class="view">
+<h2>📋 Historial de movimientos</h2>
+<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Operador</th><th>Cliente</th><th>Repartidor</th></tr></thead><tbody id="historyTable"></tbody></table>
+</section>
+</main>
+
+<script>
+const flavors = [
+"Americana","Vainilla","Crema con almendra","Crema rusa","Crema moka","Crema del cielo",
+"Crema tramontana","Crema Oreo","Granizado","Súper sambayón","Sambayón con almendras",
+"Sambayón italiano","Chocolate","Mousse de chocolate","Chocolate suizo","Chocolate especial",
+"Chocolate con almendra","Chocolate con pasas al rhum","Selva negra","Chocolate blanco",
+"Dulce de leche","Dulce de leche granizado","Dulce de leche con nuez","Dulce de leche súper",
+"Menta granizada","Flan con dulce de leche","Nocciola / Nutella","Kinder / Tiramisú",
+"Chocolate Dubái","Coco","Marroc","Banana","Banana split","Bananita Dolca",
+"Frutilla a la crema","Cerezas a la crema","Pomelo","Durazno","Frutilla","Naranja",
+"Limón / Lemon Pie","Ananá","Frambuesa","Maracuyá c/ mango","F. del bosque",
+"Kinotos al whisky","Maracuyá","Pistachio"
+];
+
+let db = {stock:{}, clients:[], moves:[]};
+try {
+  const saved = localStorage.getItem("heladeriaV1");
+  if(saved) db = JSON.parse(saved);
+} catch(e) {}
+db.stock = db.stock || {};
+db.clients = db.clients || [];
+db.moves = db.moves || [];
+
+// The stock is always rebuilt from the movement history.
+// This makes the history the source of truth and avoids display inconsistencies.
+function rebuildStock(){
+  const stock = {};
+  db.moves.forEach(m=>{
+    const k=key(m.flavor,m.size);
+    stock[k]=(stock[k]||0) + (m.type==="ENTRADA" ? Number(m.qty) : -Number(m.qty));
+  });
+  db.stock=stock;
+}
+let inCart={}, outCart={};
+
+const key=(flavor,size)=>flavor+"|"+size;
+function codeToProduct(code){
+  code=code.trim().toUpperCase();
+  // Código recomendado para la pistola: F01-4, F01-7 ... F48-4, F48-7
+  let m=code.match(/^F(\\d{1,2})[- ]?(4|7)$/);
+  if(m){
+    const idx=parseInt(m[1],10)-1;
+    if(idx>=0 && idx<flavors.length) return {flavor:flavors[idx],size:m[2]};
+  }
+  // Alias sencillos para probar sin pistola.
+  const aliases={"CHOC4":["Chocolate","4"],"CHOC7":["Chocolate","7"],
+                 "VAIN4":["Vainilla","4"],"VAIN7":["Vainilla","7"]};
+  if(aliases[code]) return {flavor:aliases[code][0],size:aliases[code][1]};
+  return null;
+}
+function save(){
+  rebuildStock();
+  try { localStorage.setItem("heladeriaV1",JSON.stringify(db)); } catch(e) {}
+  renderAll();
+}
+function show(id,btn){
+ document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+ document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+ if(btn)btn.classList.add("active");
+ renderAll();
+}
+function showById(id){
+ document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+ document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+ renderAll();
+}
+function scanEntry(e){
+ if(e.key!=="Enter")return;
+ const p=codeToProduct(e.target.value); e.target.value="";
+ if(!p){alert("Código no reconocido. Ejemplo: CHOC4");return}
+ const k=key(p.flavor,p.size);inCart[k]=(inCart[k]||0)+1;renderCarts();
+}
+function scanExit(e){
+ if(e.key!=="Enter")return;
+ const p=codeToProduct(e.target.value);e.target.value="";
+ if(!p){alert("Código no reconocido.");return}
+ const k=key(p.flavor,p.size), available=db.stock[k]||0;
+ const already=outCart[k]||0;
+ if(already>=available){alert("No hay stock suficiente de "+p.flavor+" "+p.size+" L.");return}
+ outCart[k]=already+1;renderCarts();
+}
+function renderCarts(){
+ const render=(cart,id)=>document.getElementById(id).innerHTML=Object.entries(cart).map(([k,n])=>{
+  const [f,s]=k.split("|");return `<div class="notice">${f} — ${s} L × <b>${n}</b></div>`;
+ }).join("") || '<p class="muted">Todavía no hay latas escaneadas.</p>';
+ render(inCart,"inList");render(outCart,"outList");
+}
+function confirmEntry(){
+ const op=document.getElementById("inOperator").value.trim()||"Sin identificar";
+ if(Object.keys(inCart).length===0){alert("Primero escaneá al menos una lata.");return}
+ for(const [k,n] of Object.entries(inCart)){
+  const [f,s]=k.split("|");
+  db.moves.push({date:new Date().toLocaleString(),type:"ENTRADA",flavor:f,size:s,qty:n,operator:op,client:"",driver:""});
+ }
+ inCart={};document.getElementById("inOperator").value="";save();alert("Entrada registrada correctamente.");
+}
+function confirmExit(){
+ const client=document.getElementById("outClient").value;
+ if(!client){alert("Seleccioná un cliente.");return}
+ if(Object.keys(outCart).length===0){alert("Primero escaneá al menos una lata.");return}
+ const driver=document.getElementById("outDriver").value.trim();
+ for(const [k,n] of Object.entries(outCart)){
+  const [f,s]=k.split("|");
+  db.moves.push({date:new Date().toLocaleString(),type:"SALIDA",flavor:f,size:s,qty:n,operator:"Empleado",client,driver});
+ }
+ outCart={};document.getElementById("outDriver").value="";save();alert("Salida registrada correctamente.");
+}
+function clearEntry(){inCart={};renderCarts()}
+function clearExit(){outCart={};renderCarts()}
+function addClient(){
+ const name=document.getElementById("newName").value.trim();
+ if(!name)return alert("Falta el nombre del cliente.");
+ db.clients.push({name,phone:document.getElementById("newPhone").value,address:document.getElementById("newAddress").value});
+ document.getElementById("newName").value="";document.getElementById("newPhone").value="";document.getElementById("newAddress").value="";
+ save();alert("Cliente agregado.");
+}
+function renderAll(){
+ rebuildStock();
+ let total=Object.values(db.stock).reduce((a,b)=>a+Number(b||0),0);
+ document.getElementById("totalStock").textContent=total;
+ document.getElementById("totalMoves").textContent=db.moves.length;
+ document.getElementById("totalClients").textContent=db.clients.length;
+ document.getElementById("outClient").innerHTML='<option value="">Seleccionar cliente...</option>'+db.clients.map(c=>`<option>${c.name}</option>`).join("");
+ document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${c.name}</td><td>${c.phone||"-"}</td><td>${c.address||"-"}</td></tr>`).join("");
+ document.getElementById("historyTable").innerHTML=db.moves.slice().reverse().map(m=>`<tr><td>${m.date}</td><td>${m.type}</td><td>${m.flavor} ${m.size} L</td><td>${m.qty}</td><td>${m.operator}</td><td>${m.client||"-"}</td><td>${m.driver||"-"}</td></tr>`).join("");
+ document.getElementById("stockGrid").innerHTML=flavors.flatMap(f=>["4","7"].map(sz=>{
+   const n=Number(db.stock[key(f,sz)]||0);
+   return `<div class="product"><div class="emoji">🍦</div><b>${f}</b><div>${sz} L</div><div class="stock">${n} latas</div></div>`;
+ })).join("");
+ renderCarts();
+}
+rebuildStock();
+renderAll();
+</script>
+</body>
+</html>
