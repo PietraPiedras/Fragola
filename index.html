@@ -30,12 +30,31 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 .product{background:white;border:2px solid transparent;border-radius:14px;padding:14px;cursor:pointer;box-shadow:0 2px 8px #0001}
 .product:hover{border-color:#17324d}.emoji{font-size:40px}.stock{font-weight:bold;margin-top:8px}
 .notice{padding:13px;border-radius:10px;background:#e8f4ed;margin:12px 0}.error{background:#fdeaea}
+
+.login-overlay{position:fixed;inset:0;background:#f4f6f8;display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999}
+.login-card{background:white;width:100%;max-width:420px;padding:28px;border-radius:18px;box-shadow:0 5px 25px #0002}
+.login-card h2{margin-top:0}.login-card .btn{width:100%}.login-error{display:none;padding:12px;border-radius:9px;background:#fdeaea;color:#8d1f1f;margin-top:12px}
+.userbar{display:flex;gap:10px;align-items:center}.logout{border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
 </style>
 </head>
 <body>
+
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-card">
+    <h2>🍦 Fragola</h2>
+    <p class="muted">Ingresá con tu usuario para acceder al sistema.</p>
+    <label>Correo electrónico</label>
+    <input id="loginEmail" type="email" autocomplete="username" placeholder="usuario@ejemplo.com">
+    <label>Contraseña</label>
+    <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
+    <button class="btn" onclick="loginFragola()">Ingresar</button>
+    <div id="loginError" class="login-error"></div>
+  </div>
+</div>
+
 <header>
   <div><h1>🍦 Control Heladería</h1><small>Prototipo V1 — entradas, salidas y control de latas</small></div>
-  <div id="mode">Modo empleado</div>
+  <div class="userbar"><div id="mode">Sin sesión</div><button class="logout" id="logoutBtn" onclick="logoutFragola()" style="display:none">Salir</button></div>
 </header>
 
 <nav>
@@ -65,7 +84,7 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 <section id="entrada" class="view">
 <h2>🟢 Entrada a cámara</h2>
 <div class="form">
-<label>Empleado / operador</label><input id="inOperator" placeholder="Ej.: Juan">
+<label>Empleado / operador</label><input id="inOperator" placeholder="Usuario actual" readonly>
 <div class="scanbox">
 <b>Escanear lata</b>
 <p class="muted">Para probar ahora: <b>CHOC4</b> = Chocolate 4 L. Con códigos definitivos: F01-4, F01-7, F02-4...</p>
@@ -119,7 +138,8 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDLS4RyzO_MPU-mdcxwTbm25KGeDplptrU",
@@ -133,6 +153,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const firestore = getFirestore(app);
+const auth = getAuth(app);
 
 const flavors = [
 "Americana","Vainilla","Crema con almendra","Crema rusa","Crema moka","Crema del cielo",
@@ -150,6 +171,8 @@ const flavors = [
 let db = {stock:{}, clients:[], moves:[]};
 let inCart={}, outCart={};
 let firebaseReady = false;
+let currentUser = null;
+let currentRole = null;
 
 const key=(flavor,size)=>flavor+"|"+size;
 function codeToProduct(code){
@@ -210,7 +233,7 @@ function renderCarts(){
 }
 
 async function confirmEntry(){
- const op=document.getElementById("inOperator").value.trim()||"Sin identificar";
+ const op=currentUser?.email || document.getElementById("inOperator").value.trim() || "Sin identificar";
  if(Object.keys(inCart).length===0){alert("Primero escaneá al menos una lata.");return}
  try {
   for(const [k,n] of Object.entries(inCart)){
@@ -229,7 +252,7 @@ async function confirmExit(){
  try {
   for(const [k,n] of Object.entries(outCart)){
    const [f,s]=k.split("|");
-   await addDoc(collection(firestore,"moves"),{date:new Date().toLocaleString("es-AR"),createdAt:serverTimestamp(),type:"SALIDA",flavor:f,size:s,qty:n,operator:"Empleado",client,driver});
+   await addDoc(collection(firestore,"moves"),{date:new Date().toLocaleString("es-AR"),createdAt:serverTimestamp(),type:"SALIDA",flavor:f,size:s,qty:n,operator:(currentUser?.email||"Sin identificar"),client,driver});
   }
   outCart={};document.getElementById("outDriver").value="";renderCarts();alert("Salida registrada correctamente.");
  } catch(e) { console.error(e); alert("No se pudo guardar la salida en Firebase. Revisá la conexión y las reglas de Firestore."); }
@@ -244,6 +267,50 @@ async function addClient(){
   document.getElementById("newName").value="";document.getElementById("newPhone").value="";document.getElementById("newAddress").value="";
   alert("Cliente agregado.");
  } catch(e) { console.error(e); alert("No se pudo guardar el cliente en Firebase."); }
+}
+
+
+function setLoginError(msg){
+  const el=document.getElementById("loginError");
+  el.textContent=msg; el.style.display=msg?"block":"none";
+}
+function applyRoleUI(){
+  const admin = currentRole==="admin";
+  document.getElementById("mode").textContent = currentUser ? (admin ? "Administrador" : "Empleado") : "Sin sesión";
+  document.getElementById("logoutBtn").style.display = currentUser ? "block" : "none";
+  document.querySelectorAll("nav button").forEach(btn=>{
+    const label=btn.textContent||"";
+    if(label.includes("Historial") || label.includes("Cámara")) btn.style.display=currentUser?"":"";
+  });
+  document.getElementById("loginOverlay").style.display=currentUser?"none":"flex";
+}
+async function loginFragola(){
+  const email=document.getElementById("loginEmail").value.trim();
+  const password=document.getElementById("loginPassword").value;
+  if(!email || !password){setLoginError("Completá correo y contraseña.");return}
+  setLoginError("");
+  try{
+    await signInWithEmailAndPassword(auth,email,password);
+  }catch(e){
+    console.error(e);
+    setLoginError("No se pudo iniciar sesión. Revisá el correo y la contraseña.");
+  }
+}
+async function logoutFragola(){
+  await signOut(auth);
+}
+async function loadUserRole(user){
+  // Los roles se guardarán en /users/{uid} como {role:"admin"} o {role:"empleado"}.
+  try{
+    const snap=await getDoc(doc(firestore,"users",user.uid));
+    currentRole=snap.exists() ? (snap.data().role||"empleado") : "empleado";
+  }catch(e){
+    console.error(e);
+    currentRole="empleado";
+  }
+  currentUser=user;
+  applyRoleUI();
+  renderAll();
 }
 
 function renderAll(){
@@ -267,17 +334,42 @@ function renderAll(){
 }
 
 // Datos centralizados: cualquier cambio realizado desde PC o teléfono se refleja en ambos.
-onSnapshot(collection(firestore,"moves"),(snap)=>{
-  db.moves=snap.docs.map(d=>({id:d.id,...d.data()}));
-  rebuildStock(); renderAll(); firebaseReady=true;
-},(error)=>{
-  console.error(error); alert("No se pudo leer la base de datos de Fragola. Revisá las reglas de Firestore.");
-});
+// Los listeners se activan solamente después de iniciar sesión.
+let stopMovesListener=null, stopClientsListener=null;
+function startDataListeners(){
+  if(stopMovesListener) stopMovesListener();
+  if(stopClientsListener) stopClientsListener();
 
-onSnapshot(collection(firestore,"clients"),(snap)=>{
-  db.clients=snap.docs.map(d=>({id:d.id,...d.data()}));
-  renderAll();
-},(error)=>console.error(error));
+  stopMovesListener=onSnapshot(collection(firestore,"moves"),(snap)=>{
+    db.moves=snap.docs.map(d=>({id:d.id,...d.data()}));
+    rebuildStock(); renderAll(); firebaseReady=true;
+  },(error)=>{
+    console.error(error);
+    alert("No se pudo leer la base de datos de Fragola. Revisá las reglas de Firestore.");
+  });
+
+  stopClientsListener=onSnapshot(collection(firestore,"clients"),(snap)=>{
+    db.clients=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderAll();
+  },(error)=>console.error(error));
+}
+
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    await loadUserRole(user);
+    startDataListeners();
+    const op=document.getElementById("inOperator");
+    if(op) op.value=user.email||"";
+  }else{
+    currentUser=null; currentRole=null; firebaseReady=false;
+    db={stock:{},clients:[],moves:[]};
+    if(stopMovesListener) stopMovesListener();
+    if(stopClientsListener) stopClientsListener();
+    stopMovesListener=null; stopClientsListener=null;
+    applyRoleUI();
+    renderAll();
+  }
+});
 
 renderAll();
 
@@ -292,6 +384,5 @@ window.confirmExit = confirmExit;
 window.clearEntry = clearEntry;
 window.clearExit = clearExit;
 window.addClient = addClient;
-</script>
-</body>
-</html>
+window.loginFragola = loginFragola;
+window.logoutFragola = logoutFragola;
