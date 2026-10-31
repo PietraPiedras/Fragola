@@ -117,7 +117,23 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 </section>
 </main>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDLS4RyzO_MPU-mdcxwTbm25KGeDplptrU",
+  authDomain: "fragola-80387.firebaseapp.com",
+  projectId: "fragola-80387",
+  storageBucket: "fragola-80387.firebasestorage.app",
+  messagingSenderId: "766590337025",
+  appId: "1:766590337025:web:b0a3fe3618436d980ec000",
+  measurementId: "G-L5WN1VJ549"
+};
+
+const app = initializeApp(firebaseConfig);
+const firestore = getFirestore(app);
+
 const flavors = [
 "Americana","Vainilla","Crema con almendra","Crema rusa","Crema moka","Crema del cielo",
 "Crema tramontana","Crema Oreo","Granizado","Súper sambayón","Sambayón con almendras",
@@ -132,16 +148,23 @@ const flavors = [
 ];
 
 let db = {stock:{}, clients:[], moves:[]};
-try {
-  const saved = localStorage.getItem("heladeriaV1");
-  if(saved) db = JSON.parse(saved);
-} catch(e) {}
-db.stock = db.stock || {};
-db.clients = db.clients || [];
-db.moves = db.moves || [];
+let inCart={}, outCart={};
+let firebaseReady = false;
 
-// The stock is always rebuilt from the movement history.
-// This makes the history the source of truth and avoids display inconsistencies.
+const key=(flavor,size)=>flavor+"|"+size;
+function codeToProduct(code){
+  code=code.trim().toUpperCase();
+  let m=code.match(/^F(\d{1,2})[- ]?(4|7)$/);
+  if(m){
+    const idx=parseInt(m[1],10)-1;
+    if(idx>=0 && idx<flavors.length) return {flavor:flavors[idx],size:m[2]};
+  }
+  const aliases={"CHOC4":["Chocolate","4"],"CHOC7":["Chocolate","7"],
+                 "VAIN4":["Vainilla","4"],"VAIN7":["Vainilla","7"]};
+  if(aliases[code]) return {flavor:aliases[code][0],size:aliases[code][1]};
+  return null;
+}
+
 function rebuildStock(){
   const stock = {};
   db.moves.forEach(m=>{
@@ -150,28 +173,7 @@ function rebuildStock(){
   });
   db.stock=stock;
 }
-let inCart={}, outCart={};
 
-const key=(flavor,size)=>flavor+"|"+size;
-function codeToProduct(code){
-  code=code.trim().toUpperCase();
-  // Código recomendado para la pistola: F01-4, F01-7 ... F48-4, F48-7
-  let m=code.match(/^F(\\d{1,2})[- ]?(4|7)$/);
-  if(m){
-    const idx=parseInt(m[1],10)-1;
-    if(idx>=0 && idx<flavors.length) return {flavor:flavors[idx],size:m[2]};
-  }
-  // Alias sencillos para probar sin pistola.
-  const aliases={"CHOC4":["Chocolate","4"],"CHOC7":["Chocolate","7"],
-                 "VAIN4":["Vainilla","4"],"VAIN7":["Vainilla","7"]};
-  if(aliases[code]) return {flavor:aliases[code][0],size:aliases[code][1]};
-  return null;
-}
-function save(){
-  rebuildStock();
-  try { localStorage.setItem("heladeriaV1",JSON.stringify(db)); } catch(e) {}
-  renderAll();
-}
 function show(id,btn){
  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
  document.getElementById(id).classList.add("active");
@@ -206,35 +208,44 @@ function renderCarts(){
  }).join("") || '<p class="muted">Todavía no hay latas escaneadas.</p>';
  render(inCart,"inList");render(outCart,"outList");
 }
-function confirmEntry(){
+
+async function confirmEntry(){
  const op=document.getElementById("inOperator").value.trim()||"Sin identificar";
  if(Object.keys(inCart).length===0){alert("Primero escaneá al menos una lata.");return}
- for(const [k,n] of Object.entries(inCart)){
-  const [f,s]=k.split("|");
-  db.moves.push({date:new Date().toLocaleString(),type:"ENTRADA",flavor:f,size:s,qty:n,operator:op,client:"",driver:""});
- }
- inCart={};document.getElementById("inOperator").value="";save();alert("Entrada registrada correctamente.");
+ try {
+  for(const [k,n] of Object.entries(inCart)){
+   const [f,s]=k.split("|");
+   await addDoc(collection(firestore,"moves"),{date:new Date().toLocaleString("es-AR"),createdAt:serverTimestamp(),type:"ENTRADA",flavor:f,size:s,qty:n,operator:op,client:"",driver:""});
+  }
+  inCart={};document.getElementById("inOperator").value="";renderCarts();alert("Entrada registrada correctamente.");
+ } catch(e) { console.error(e); alert("No se pudo guardar la entrada en Firebase. Revisá la conexión y las reglas de Firestore."); }
 }
-function confirmExit(){
+
+async function confirmExit(){
  const client=document.getElementById("outClient").value;
  if(!client){alert("Seleccioná un cliente.");return}
  if(Object.keys(outCart).length===0){alert("Primero escaneá al menos una lata.");return}
  const driver=document.getElementById("outDriver").value.trim();
- for(const [k,n] of Object.entries(outCart)){
-  const [f,s]=k.split("|");
-  db.moves.push({date:new Date().toLocaleString(),type:"SALIDA",flavor:f,size:s,qty:n,operator:"Empleado",client,driver});
- }
- outCart={};document.getElementById("outDriver").value="";save();alert("Salida registrada correctamente.");
+ try {
+  for(const [k,n] of Object.entries(outCart)){
+   const [f,s]=k.split("|");
+   await addDoc(collection(firestore,"moves"),{date:new Date().toLocaleString("es-AR"),createdAt:serverTimestamp(),type:"SALIDA",flavor:f,size:s,qty:n,operator:"Empleado",client,driver});
+  }
+  outCart={};document.getElementById("outDriver").value="";renderCarts();alert("Salida registrada correctamente.");
+ } catch(e) { console.error(e); alert("No se pudo guardar la salida en Firebase. Revisá la conexión y las reglas de Firestore."); }
 }
 function clearEntry(){inCart={};renderCarts()}
 function clearExit(){outCart={};renderCarts()}
-function addClient(){
+async function addClient(){
  const name=document.getElementById("newName").value.trim();
  if(!name)return alert("Falta el nombre del cliente.");
- db.clients.push({name,phone:document.getElementById("newPhone").value,address:document.getElementById("newAddress").value});
- document.getElementById("newName").value="";document.getElementById("newPhone").value="";document.getElementById("newAddress").value="";
- save();alert("Cliente agregado.");
+ try {
+  await addDoc(collection(firestore,"clients"),{name,phone:document.getElementById("newPhone").value,address:document.getElementById("newAddress").value,createdAt:serverTimestamp()});
+  document.getElementById("newName").value="";document.getElementById("newPhone").value="";document.getElementById("newAddress").value="";
+  alert("Cliente agregado.");
+ } catch(e) { console.error(e); alert("No se pudo guardar el cliente en Firebase."); }
 }
+
 function renderAll(){
  rebuildStock();
  let total=Object.values(db.stock).reduce((a,b)=>a+Number(b||0),0);
@@ -243,14 +254,31 @@ function renderAll(){
  document.getElementById("totalClients").textContent=db.clients.length;
  document.getElementById("outClient").innerHTML='<option value="">Seleccionar cliente...</option>'+db.clients.map(c=>`<option>${c.name}</option>`).join("");
  document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${c.name}</td><td>${c.phone||"-"}</td><td>${c.address||"-"}</td></tr>`).join("");
- document.getElementById("historyTable").innerHTML=db.moves.slice().reverse().map(m=>`<tr><td>${m.date}</td><td>${m.type}</td><td>${m.flavor} ${m.size} L</td><td>${m.qty}</td><td>${m.operator}</td><td>${m.client||"-"}</td><td>${m.driver||"-"}</td></tr>`).join("");
+ const movesSorted=db.moves.slice().sort((a,b)=>{
+   const ta=a.createdAt?.toMillis?.()||0, tb=b.createdAt?.toMillis?.()||0;
+   return tb-ta;
+ });
+ document.getElementById("historyTable").innerHTML=movesSorted.map(m=>`<tr><td>${m.date||"-"}</td><td>${m.type}</td><td>${m.flavor} ${m.size} L</td><td>${m.qty}</td><td>${m.operator}</td><td>${m.client||"-"}</td><td>${m.driver||"-"}</td></tr>`).join("");
  document.getElementById("stockGrid").innerHTML=flavors.flatMap(f=>["4","7"].map(sz=>{
    const n=Number(db.stock[key(f,sz)]||0);
    return `<div class="product"><div class="emoji">🍦</div><b>${f}</b><div>${sz} L</div><div class="stock">${n} latas</div></div>`;
  })).join("");
  renderCarts();
 }
-rebuildStock();
+
+// Datos centralizados: cualquier cambio realizado desde PC o teléfono se refleja en ambos.
+onSnapshot(collection(firestore,"moves"),(snap)=>{
+  db.moves=snap.docs.map(d=>({id:d.id,...d.data()}));
+  rebuildStock(); renderAll(); firebaseReady=true;
+},(error)=>{
+  console.error(error); alert("No se pudo leer la base de datos de Fragola. Revisá las reglas de Firestore.");
+});
+
+onSnapshot(collection(firestore,"clients"),(snap)=>{
+  db.clients=snap.docs.map(d=>({id:d.id,...d.data()}));
+  renderAll();
+},(error)=>console.error(error));
+
 renderAll();
 </script>
 </body>
