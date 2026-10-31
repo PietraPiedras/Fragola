@@ -35,6 +35,8 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 .login-card{background:white;width:100%;max-width:420px;padding:28px;border-radius:18px;box-shadow:0 5px 25px #0002}
 .login-card h2{margin-top:0}.login-card .btn{width:100%}.login-error{display:none;padding:12px;border-radius:9px;background:#fdeaea;color:#8d1f1f;margin-top:12px}
 .userbar{display:flex;gap:10px;align-items:center}.logout{border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
+.mrow{display:flex;gap:8px;flex-wrap:wrap}.mrow select,.mrow input{width:auto;flex:1 1 120px}.mrow .btn{margin-top:0}
+.void td{opacity:.55}.void td:not(:last-child){text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -63,7 +65,7 @@ window.addEventListener("unhandledrejection",function(ev){
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
-    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 5 (login corregido)</div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 6 (roles y anulaciones)</div>
   </div>
 </div>
 
@@ -90,10 +92,13 @@ window.addEventListener("unhandledrejection",function(ev){
   </div>
   <div class="cards">
     <div class="card"><div class="muted">Latas en cámara</div><div class="big" id="totalStock">0</div></div>
+    <div class="card"><div class="muted">Latas de 4 L</div><div class="big" id="stock4">0</div></div>
+    <div class="card"><div class="muted">Latas de 7 L</div><div class="big" id="stock7">0</div></div>
     <div class="card"><div class="muted">Movimientos</div><div class="big" id="totalMoves">0</div></div>
     <div class="card"><div class="muted">Clientes</div><div class="big" id="totalClients">0</div></div>
   </div>
-  <div id="homeNotice"></div>
+  <h3>Últimos movimientos</h3>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Usuario</th></tr></thead><tbody id="lastMoves"></tbody></table>
 </section>
 
 <section id="entrada" class="view">
@@ -105,6 +110,7 @@ window.addEventListener("unhandledrejection",function(ev){
 <p class="muted">Para probar ahora: <b>CHOC4</b> = Chocolate 4 L. Con códigos definitivos: F01-4, F01-7, F02-4...</p>
 <input id="inScan" placeholder="Código, ej. CHOC4" onkeydown="scanEntry(event)">
 </div>
+<div class="manual"><label>O cargar a mano</label><div class="mrow"><select class="mf"></select><select class="ms"><option value="4">4 L</option><option value="7">7 L</option></select><input class="mq" type="number" min="1" step="1" value="1"><button class="btn secondary" type="button" onclick="addManual('in',this)">Agregar</button></div></div>
 <div id="inList"></div>
 <button class="btn" onclick="confirmEntry()">Confirmar entrada</button>
 <button class="btn secondary" onclick="clearEntry()">Cancelar</button>
@@ -122,6 +128,7 @@ window.addEventListener("unhandledrejection",function(ev){
 <p class="muted">Primero seleccioná el cliente y después escaneá.</p>
 <input id="outScan" placeholder="Código, ej. CHOC4" onkeydown="scanExit(event)">
 </div>
+<div class="manual"><label>O cargar a mano</label><div class="mrow"><select class="mf"></select><select class="ms"><option value="4">4 L</option><option value="7">7 L</option></select><input class="mq" type="number" min="1" step="1" value="1"><button class="btn secondary" type="button" onclick="addManual('out',this)">Agregar</button></div></div>
 <div id="outList"></div>
 <button class="btn danger" onclick="confirmExit()">Confirmar salida</button>
 <button class="btn secondary" onclick="clearExit()">Cancelar</button>
@@ -142,17 +149,17 @@ window.addEventListener("unhandledrejection",function(ev){
 <button class="btn" onclick="addClient()">Agregar cliente</button>
 </div>
 <br>
-<table><thead><tr><th>Cliente</th><th>Contacto</th><th>Dirección</th></tr></thead><tbody id="clientTable"></tbody></table>
+<table><thead><tr><th>Cliente</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody id="clientTable"></tbody></table>
 </section>
 
 <section id="historial" class="view">
 <h2>📋 Historial de movimientos</h2>
-<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Operador</th><th>Cliente</th><th>Repartidor</th></tr></thead><tbody id="historyTable"></tbody></table>
+<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cant.</th><th>Operador</th><th>Cliente</th><th>Repartidor</th><th>Estado</th></tr></thead><tbody id="historyTable"></tbody></table>
 </section>
 </main>
 
 <script type="module">
-let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged;
+let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc,getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged;
 {
   const bases=[
     "https://www.gstatic.com/firebasejs/13.1.0/",
@@ -167,7 +174,7 @@ let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSna
       const F=await import(B+"firebase-firestore.js");
       const U=await import(B+"firebase-auth.js");
       ({initializeApp,getApp,getApps}=A);
-      ({getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp}=F);
+      ({getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,updateDoc,deleteDoc}=F);
       ({getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged}=U);
       cargado=true;
       document.getElementById("loginStatus").textContent+=" · Firebase "+B.split("/").slice(-2,-1)[0];
@@ -232,6 +239,7 @@ function codeToProduct(code){
 function rebuildStock(){
   const stock = {};
   db.moves.forEach(m=>{
+    if(m.voided)return;
     const k=key(m.flavor,m.size);
     stock[k]=(stock[k]||0) + (m.type==="ENTRADA" ? Number(m.qty) : -Number(m.qty));
   });
@@ -354,22 +362,63 @@ async function loadUserRole(user){
   renderAll();
 }
 
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function addManual(kind,btn){
+ const r=btn.closest(".manual");
+ const f=r.querySelector(".mf").value, s=r.querySelector(".ms").value, q=parseInt(r.querySelector(".mq").value,10);
+ if(!f||!(q>0)){alert("Elegí gusto y una cantidad válida.");return}
+ const k=key(f,s);
+ if(kind==="in"){inCart[k]=(inCart[k]||0)+q}
+ else{
+  const av=db.stock[k]||0, already=outCart[k]||0;
+  if(already+q>av){alert("No hay stock suficiente de "+f+" "+s+" L (hay "+av+").");return}
+  outCart[k]=already+q;
+ }
+ renderCarts();
+}
+async function voidMove(id){
+ if(currentRole!=="admin"){alert("Solo un administrador puede anular movimientos.");return}
+ const m=db.moves.find(x=>x.id===id); if(!m||m.voided)return;
+ if(m.type==="ENTRADA" && (db.stock[key(m.flavor,m.size)]||0)-Number(m.qty)<0){
+  alert("No se puede anular: ya salieron latas de esa entrada y el stock quedaría negativo. Primero anulá las salidas correspondientes.");return;
+ }
+ const reason=prompt("Motivo de la anulación (obligatorio):");
+ if(!reason||!reason.trim())return;
+ try{
+  await updateDoc(doc(firestore,"moves",id),{voided:true,voidedBy:currentUser.email,voidedAt:serverTimestamp(),voidReason:reason.trim()});
+ }catch(e){console.error(e);alert("No se pudo anular. Revisá tu rol y las reglas de Firestore.");}
+}
+async function deleteClient(id){
+ if(currentRole!=="admin"){alert("Solo un administrador puede borrar clientes.");return}
+ if(!confirm("¿Borrar este cliente? Los movimientos ya registrados se conservan."))return;
+ try{await deleteDoc(doc(firestore,"clients",id));}catch(e){console.error(e);alert("No se pudo borrar el cliente.");}
+}
+
 function renderAll(){
  rebuildStock();
- let total=Object.values(db.stock).reduce((a,b)=>a+Number(b||0),0);
- document.getElementById("totalStock").textContent=total;
+ const admin=currentRole==="admin";
+ let t4=0,t7=0;
+ Object.entries(db.stock).forEach(([k,v])=>{const n=Number(v||0); if(k.endsWith("|4"))t4+=n; else t7+=n;});
+ document.getElementById("totalStock").textContent=t4+t7;
+ document.getElementById("stock4").textContent=t4;
+ document.getElementById("stock7").textContent=t7;
  document.getElementById("totalMoves").textContent=db.moves.length;
  document.getElementById("totalClients").textContent=db.clients.length;
- document.getElementById("outClient").innerHTML='<option value="">Seleccionar cliente...</option>'+db.clients.map(c=>`<option>${c.name}</option>`).join("");
- document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${c.name}</td><td>${c.phone||"-"}</td><td>${c.address||"-"}</td></tr>`).join("");
- const movesSorted=db.moves.slice().sort((a,b)=>{
-   const ta=a.createdAt?.toMillis?.()||0, tb=b.createdAt?.toMillis?.()||0;
-   return tb-ta;
- });
- document.getElementById("historyTable").innerHTML=movesSorted.map(m=>`<tr><td>${m.date||"-"}</td><td>${m.type}</td><td>${m.flavor} ${m.size} L</td><td>${m.qty}</td><td>${m.operator}</td><td>${m.client||"-"}</td><td>${m.driver||"-"}</td></tr>`).join("");
+ document.querySelectorAll(".mf").forEach(el=>{ if(!el.options.length) el.innerHTML=flavors.map(f=>`<option>${esc(f)}</option>`).join(""); });
+ const sel=document.getElementById("outClient"), prev=sel.value;
+ sel.innerHTML='<option value="">Seleccionar cliente...</option>'+db.clients.map(c=>`<option>${esc(c.name)}</option>`).join("");
+ sel.value=prev;
+ document.getElementById("clientTable").innerHTML=db.clients.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone)||"-"}</td><td>${esc(c.address)||"-"}</td><td>${admin?`<button class="btn danger" style="margin:0;padding:6px 10px" onclick="deleteClient('${c.id}')">Borrar</button>`:""}</td></tr>`).join("");
+ const sorted=db.moves.slice().sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+ document.getElementById("historyTable").innerHTML=sorted.map(m=>{
+  const est=m.voided?`Anulado por ${esc(m.voidedBy)}${m.voidReason?": "+esc(m.voidReason):""}`:(admin?`<button class="btn danger" style="margin:0;padding:6px 10px" onclick="voidMove('${m.id}')">Anular</button>`:"OK");
+  return `<tr class="${m.voided?"void":""}"><td>${esc(m.date)||"-"}</td><td>${esc(m.type)}</td><td>${esc(m.flavor)} ${esc(m.size)} L</td><td>${esc(m.qty)}</td><td>${esc(m.operator)}</td><td>${esc(m.client)||"-"}</td><td>${esc(m.driver)||"-"}</td><td>${est}</td></tr>`;
+ }).join("");
+ document.getElementById("lastMoves").innerHTML=sorted.filter(m=>!m.voided).slice(0,5).map(m=>`<tr><td>${esc(m.date)||"-"}</td><td>${esc(m.type)}</td><td>${esc(m.flavor)} ${esc(m.size)} L</td><td>${esc(m.qty)}</td><td>${esc(m.operator)}</td></tr>`).join("");
  document.getElementById("stockGrid").innerHTML=flavors.flatMap(f=>["4","7"].map(sz=>{
    const n=Number(db.stock[key(f,sz)]||0);
-   return `<div class="product"><div class="emoji">🍦</div><b>${f}</b><div>${sz} L</div><div class="stock">${n} latas</div></div>`;
+   return `<div class="product"><div class="emoji">🍦</div><b>${esc(f)}</b><div>${sz} L</div><div class="stock">${n} latas</div></div>`;
  })).join("");
  renderCarts();
 }
@@ -432,6 +481,9 @@ window.clearExit = clearExit;
 window.addClient = addClient;
 window.loginFragola = loginFragola;
 window.logoutFragola = logoutFragola;
+window.addManual = addManual;
+window.voidMove = voidMove;
+window.deleteClient = deleteClient;
 </script>
 </body>
 </html>
