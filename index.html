@@ -49,6 +49,7 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px"></div>
   </div>
 </div>
 
@@ -137,7 +138,7 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 </main>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
@@ -151,7 +152,7 @@ const firebaseConfig = {
   measurementId: "G-L5WN1VJ549"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const firestore = getFirestore(app);
 const auth = getAuth(app);
 
@@ -370,12 +371,6 @@ onAuthStateChanged(auth, async (user)=>{
     renderAll();
   }
 });
-
-document.getElementById("loginBtn")?.addEventListener("click", loginFragola);
-document.getElementById("loginPassword")?.addEventListener("keydown", (e)=>{
-  if(e.key==="Enter") loginFragola();
-});
-document.getElementById("logoutBtn")?.addEventListener("click", logoutFragola);
 
 renderAll();
 
