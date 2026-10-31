@@ -38,6 +38,20 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 </style>
 </head>
 <body>
+<script>
+function mostrarFallo(msg){
+  var e=document.getElementById("loginError");
+  if(e){e.style.display="block";e.textContent=msg;}
+}
+window.addEventListener("error",function(ev){
+  var t=ev.target;
+  if(t&&t.tagName==="SCRIPT"){mostrarFallo("Error: no se pudo cargar un script. "+(t.src||"(script de la página)"));}
+  else{mostrarFallo("Error: "+(ev.message||"desconocido")+(ev.lineno?" (línea "+ev.lineno+")":""));}
+},true);
+window.addEventListener("unhandledrejection",function(ev){
+  mostrarFallo("Error: "+((ev.reason&&(ev.reason.message||ev.reason))||"desconocido"));
+});
+</script>
 
 <div id="loginOverlay" class="login-overlay">
   <div class="login-card">
@@ -49,7 +63,7 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
     <button id="loginBtn" class="btn" type="button">Ingresar</button>
     <div id="loginError" class="login-error"></div>
-    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 2 (login corregido)</div>
+    <div id="loginStatus" style="margin-top:10px;color:#68737d;font-size:14px">Versión 5 (login corregido)</div>
   </div>
 </div>
 
@@ -138,9 +152,35 @@ th,td{padding:12px;border-bottom:1px solid #e8ebee;text-align:left}th{background
 </main>
 
 <script type="module">
-import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+let initializeApp,getApp,getApps,getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp,getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged;
+{
+  const bases=[
+    "https://www.gstatic.com/firebasejs/13.1.0/",
+    "https://www.gstatic.com/firebasejs/12.11.0/",
+    "https://www.gstatic.com/firebasejs/12.10.0/",
+    "https://www.gstatic.com/firebasejs/11.10.0/"
+  ];
+  const fallos=[]; let cargado=false;
+  for(const B of bases){
+    try{
+      const A=await import(B+"firebase-app.js");
+      const F=await import(B+"firebase-firestore.js");
+      const U=await import(B+"firebase-auth.js");
+      ({initializeApp,getApp,getApps}=A);
+      ({getFirestore,collection,addDoc,getDoc,doc,onSnapshot,serverTimestamp}=F);
+      ({getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged}=U);
+      cargado=true;
+      document.getElementById("loginStatus").textContent+=" · Firebase "+B.split("/").slice(-2,-1)[0];
+      break;
+    }catch(e){
+      fallos.push(B.split("/").slice(-2,-1)[0]+": "+(e&&e.message?e.message:e));
+    }
+  }
+  if(!cargado){
+    mostrarFallo("No se pudo cargar Firebase desde ningún servidor. "+fallos.join(" | "));
+    throw new Error("Firebase no cargó");
+  }
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyDLS4RyzO_MPU-mdcxwTbm25KGeDplptrU",
@@ -392,3 +432,6 @@ window.clearExit = clearExit;
 window.addClient = addClient;
 window.loginFragola = loginFragola;
 window.logoutFragola = logoutFragola;
+</script>
+</body>
+</html>
