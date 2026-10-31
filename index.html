@@ -372,6 +372,11 @@ onAuthStateChanged(auth, async (user)=>{
   }
 });
 
+document.getElementById("loginBtn").addEventListener("click", loginFragola);
+document.getElementById("logoutBtn").addEventListener("click", logoutFragola);
+document.getElementById("loginPassword").addEventListener("keydown", (e)=>{ if(e.key==="Enter") loginFragola(); });
+document.getElementById("loginEmail").addEventListener("keydown", (e)=>{ if(e.key==="Enter") loginFragola(); });
+
 renderAll();
 
 // Firebase usa <script type="module">, por eso las funciones deben quedar
